@@ -1,0 +1,206 @@
+---
+title: "Course 5: Reproducible Research Assignment 1"
+author: "Steven Wang"
+date: "20 December 2015"
+output: 
+  html_document:
+    toc: TRUE
+    number_sections: TRUE
+---
+# Introduction
+
+The purpose of this assignment is to use the knitr pacakge to create reproducible reports, in this instance, a reproducible HTML file. The assignment uses the dataset: [Activity Monitoring Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip).
+
+# Data Preparation
+
+## Load and Explore Data
+
+```{r echo=TRUE}
+getdata <- read.csv("activity.csv")
+head(getdata)
+str(getdata)
+
+```
+
+## Preprocess Data
+
+Since the date field is Factor characters, we will need to convert it to Date format for later use.
+
+
+```{r echo=TRUE}
+getdata$date <- as.Date(getdata$date,"%Y-%m-%d")
+str(getdata)
+
+```
+
+
+# Question Answers
+
+## What is mean total number of steps taken per day?
+
+### Calculate the total number of steps taken per day
+
+```{r echo=TRUE}
+stepsperday <- aggregate(steps ~ date,data=getdata,sum)
+str(stepsperday)
+head(stepsperday)
+
+```
+
+### Histogram steps taken per day
+
+```{r echo=TRUE}
+library(ggplot2) ##I use ggplot2 package here, please install if you haven't
+binstart <- min(stepsperday$steps) # get the hitogram original starts
+binsize <- ceiling(diff(range(stepsperday$steps)) / 25) # get bin size for a given number of breaks
+g <- ggplot(stepsperday, aes(x=steps))
+g <- g + geom_histogram(binwidth = binsize,fill = "dark blue",colour="white",origin=binstart) + theme_bw()
+# add a chart title
+g <- g + ggtitle("Histogram of total number of steps taken per day")
+g <- g + theme(plot.title=element_text(size = 16, face = "bold", color = "blue"))
+# change the x-axis and y-axis labels
+g <- g + labs(x=paste("Steps - Bin Size:",binsize),y="Frequency")
+g
+
+```
+
+### Mean and median of the total number of steps taken per day
+
+```{r echo = TRUE}
+# calculate the mean of steps taken per day
+mean(stepsperday$steps)
+# calculate the median of steps taken per day
+median(stepsperday$steps)
+```
+
+## What is the average daily activity pattern?
+
+### Average number of steps taken on 5-minute interval
+
+Make a time series plot (i.e. `type = "l"`) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+
+```{r echo=TRUE}
+stepsperint <- aggregate(steps ~ interval, data = getdata, mean)
+g <- ggplot(stepsperint, aes(x=interval,y=steps))
+g <- g + geom_line(color = "blue", size = 1) + theme_bw()
+# add a chart title
+g <- g + ggtitle("Average Steps per 5-minutes Interval")
+g <- g + theme(plot.title=element_text(size = 16, face = "bold", color = "blue"))
+# change the x-axis and y-axis labels
+g <- g + labs(x="5-minutes Interval",y="Average Steps")
+g
+
+```
+
+### 5-minutes interval has maximum steps
+
+Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+```{r echo=TRUE}
+stepsperint$interval[which.max(stepsperint$steps)]
+
+```
+
+
+## Importing missing Values
+
+### Number of missing values in the dataset
+
+```{r echo=TRUE}
+sum(complete.cases(getdata)==0) # to find out where the row is not completed record
+
+```
+
+### Devise a strategy for filling in all of the missing values
+
+Here i would like to use a simplified strategy to fill the missing value. Based on the previous step, we have already got the average steps per 5-minutes intervals for any days in the record. I will use this average steps per 5-minutes intervals to apply to our missing data.
+
+```{r echo=TRUE}
+datawithNA <- getdata[complete.cases(getdata)==0,] # separate missing value data
+datareplaceNA <- merge(x= datawithNA,y= stepsperint, by.x = "interval", by.y = "interval")
+dim(datareplaceNA)
+dataNAreplaced <- data.frame(steps=datareplaceNA$steps.y, date = datareplaceNA$date,interval =datareplaceNA$interval)
+dim(dataNAreplaced)
+```
+
+
+### Create a new dataset with the missing data filled in
+
+Now we have a dataset which all the missing data has been replaced. How can we put this data back to original data? The simple answer will be to add on to the previous complete cases.
+
+```{r echo=TRUE}
+datacomplete <- getdata[complete.cases(getdata)==1,] # get only complete data from original
+newdata <- rbind(dataNAreplaced,datacomplete)
+str(newdata)
+```
+
+### Make Histogram on dataset with missing data replaced
+
+
+```{r echo=TRUE}
+stepsperday <- aggregate(steps ~ date,data=newdata,sum)
+binstart <- min(stepsperday$steps) # get the hitogram original starts
+binsize <- ceiling(diff(range(stepsperday$steps)) / 25) # get bin size for a given number of breaks
+g <- ggplot(stepsperday, aes(x=steps))
+g <- g + geom_histogram(binwidth = binsize,fill = "dark blue",colour="white",origin=binstart) + theme_bw()
+# add a chart title
+g <- g + ggtitle("Histogram of total number of steps taken per day")
+g <- g + theme(plot.title=element_text(size = 16, face = "bold", color = "blue"))
+# change the x-axis and y-axis labels
+g <- g + labs(x=paste("Steps - Bin Size:",binsize),y="Frequency")
+g
+
+```
+
+#### Calculate mean and Median on dataset with missing data replaced
+
+```{r echo = TRUE}
+# calculate the mean of steps taken per day
+mean(stepsperday$steps)
+# calculate the median of steps taken per day
+median(stepsperday$steps)
+```
+
+#### Impact of imputing missing data
+
+After we filled in the missing data based on the mean value of 5-minute steps, we found that the frequency at the middle part of the hitogram is increased largely.
+
+Also we noticed that there is no change on the mean value which is understandable as we replaced the missing value based on the mean value.
+
+However, that the median value on new dataset is slightly different and it is no more in line with mean value.
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+### Create a new factor variable with two levels: "weekday" and "Weekend"
+
+```{r echo=TRUE}
+newdata$wk <- weekdays(newdata$date)
+newdata$daytype <- "Weekday"
+newdata[newdata$wk == "Saturday" | newdata$wk == "Sunday",]$daytype <- "Weekend"
+newdata$daytype <- as.factor(newdata$daytype)
+str(newdata)
+
+```
+
+### Plot average number of steps per 5-minute interval by date type
+
+Make a panel plot containing a time series plot (i.e. `type = "l"`) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.
+
+```{r echo=TRUE}
+stepsperint <- aggregate(steps ~ interval +daytype, data = newdata, mean)
+g <- ggplot(stepsperint, aes(x=interval,y=steps,colour=daytype))
+g <- g + geom_line(size = 1) + theme_bw()
+# add a chart title
+g <- g + ggtitle("Average Steps per 5-minutes Interval")
+# g <- g + theme(plot.title=element_text(size = 16, face = "bold"))
+# change the x-axis and y-axis labels
+g <- g + labs(x="5-minutes Interval",y="Average Steps")
+g
+
+```
+
+
+This ends up my assignment.
+
+  
